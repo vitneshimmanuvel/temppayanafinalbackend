@@ -1,0 +1,76 @@
+# =========================
+# Node.js backend .gitignore
+# =========================
+
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+.env.test
+.env.production
+.env.local
+.env.development.local
+
+# Build output
+dist/
+build/
+out/
+
+# Logs
+logs
+*.log
+logs/*.log
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage reports
+coverage/
+*.lcov
+
+# Temporary files
+.tmp/
+.temp/
+cache/
+.nyc_output/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor folders
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# TypeScript
+*.tsbuildinfo
+
+# Optional: If using PM2
+pids/
+pmlogs/
+
+# Optional: If using Prisma or Sequelize
+prisma/migrations/
+.sequelize/
+
+# Optional: If using Docker
+docker-compose.override.yml
+Dockerfile.dev
+
+# Optional: If using tests
+jest-html-reporters-*
+test-results.xml
+
+# Optional: Ignore lock files if you want consistency across devs
+# (Uncomment if you use only one package manager)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
