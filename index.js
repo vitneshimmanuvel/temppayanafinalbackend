@@ -83,30 +83,50 @@ const transporter = nodemailer.createTransport({
 });
 
 // Helper Functions
+// Updated Helper Function for Multiple Recipients
 const sendEmail = (subject, htmlContent) => {
+  // Split comma-separated email addresses and trim whitespace
+  const recipients = process.env.EMAIL_RECEIVERS.split(',').map(email => email.trim());
+  
   const mailOptions = {
-    from: process.env.EMAIL_USER,
-    to: process.env.EMAIL_RECIVER,
-    subject,
+    from: `Payana Overseas <${process.env.EMAIL_USER}>`,
+    to: recipients.join(', '), // Join all recipients
+    subject: subject,
     html: htmlContent
   };
 
   transporter.sendMail(mailOptions, (error, info) => {
     if (error) {
-      return console.error('Error sending email:', error);
+      console.error('❌ Error sending email:', error);
+      return;
     }
-    console.log('Email sent:', info.response);
+    console.log('✅ Email sent successfully:', info.response);
+    console.log('📧 Recipients:', recipients.join(', '));
   });
 };
 
+// Enhanced formatAsTable with better styling
 const formatAsTable = (dataObj) => {
   return `
-    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse;">
-      ${Object.entries(dataObj).map(([key, value]) =>
-        `<tr><th align="left">${key}</th><td>${value}</td></tr>`).join('')}
+    <table border="1" cellpadding="10" cellspacing="0" style="border-collapse: collapse; width: 100%; max-width: 600px; font-family: Arial, sans-serif;">
+      <thead>
+        <tr style="background-color: #0066cc; color: white;">
+          <th align="left" style="padding: 12px;">Field</th>
+          <th align="left" style="padding: 12px;">Value</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${Object.entries(dataObj).map(([key, value]) =>
+          `<tr style="border-bottom: 1px solid #ddd;">
+            <th align="left" style="padding: 10px; background-color: #f5f5f5; font-weight: 600;">${key}</th>
+            <td style="padding: 10px;">${value || 'N/A'}</td>
+          </tr>`
+        ).join('')}
+      </tbody>
     </table>
   `;
 };
+
 
 // Cloudinary Upload Helper
 const uploadToCloudinary = (buffer) => {
@@ -277,6 +297,7 @@ initializeTables();
 // ==================== FORM SUBMISSION ROUTES ====================
 
 // Study form submission
+// Study form submission with enhanced email
 app.post('/submit-form', async (req, res) => {
   const formData = req.body;
   console.log('📚 Received study form data:', formData);
@@ -306,24 +327,54 @@ app.post('/submit-form', async (req, res) => {
     const result = await pool.query(query, values);
     console.log('✅ Study data inserted successfully');
 
-    // Send email
-    const emailSubject = '🎓 New Study Abroad Inquiry';
+    // Send professional email notification
+    const emailSubject = '🎓 New Study Abroad Inquiry - Payana Overseas';
     const emailBody = `
-      <h2>Study Abroad Inquiry</h2>
-      <p>A new student wants to study abroad. Here are their details:</p>
-      ${formatAsTable({
-        'Country': formData.selectedCountry,
-        'Qualification': formData.selectedQualification,
-        'Age': formData.selectedAge,
-        'Education Topic': formData.selectedEducationTopic,
-        'CGPA': formData.currentCgpa,
-        'Budget': formData.selectedBudget,
-        'Needs Loan': formData.needsLoan ? 'Yes' : 'No',
-        'Name': formData.name,
-        'Email': formData.email,
-        'Phone': formData.phone
-      })}
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: #0066cc; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0; font-size: 24px;">🎓 New Study Abroad Inquiry</h1>
+        </div>
+        
+        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px;">
+          <p style="font-size: 16px; margin-bottom: 20px;">
+            A new student has expressed interest in studying abroad. Here are their details:
+          </p>
+          
+          ${formatAsTable({
+            'Country of Interest': formData.selectedCountry || 'Not specified',
+            'Qualification': formData.selectedQualification || 'Not specified',
+            'Age': formData.selectedAge || 'Not specified',
+            'Education Topic': formData.selectedEducationTopic || 'Not specified',
+            'Current CGPA': formData.currentCgpa || 'Not specified',
+            'Budget Range': formData.selectedBudget || 'Not specified',
+            'Needs Loan': formData.needsLoan ? 'Yes' : 'No',
+            '---': '---',
+            'Full Name': formData.name || 'Not provided',
+            'Email Address': formData.email || 'Not provided',
+            'Phone Number': formData.phone || 'Not provided'
+          })}
+          
+          <div style="margin-top: 30px; padding: 15px; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
+            <p style="margin: 0; font-size: 14px;">
+              <strong>⚡ Action Required:</strong> Please follow up with this lead as soon as possible.
+            </p>
+          </div>
+          
+          <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; font-size: 12px; color: #666;">
+            <p style="margin: 5px 0;">This is an automated notification from Payana Overseas CRM</p>
+            <p style="margin: 5px 0;">Submission Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+          </div>
+        </div>
+      </body>
+      </html>
     `;
+    
     sendEmail(emailSubject, emailBody);
 
     res.status(200).json({
@@ -342,6 +393,7 @@ app.post('/submit-form', async (req, res) => {
 });
 
 // Work form submission
+// Work form submission with enhanced email
 app.post('/submit-work-form', async (req, res) => {
   const formData = req.body;
   console.log('💼 Received work profile data:', formData);
@@ -366,20 +418,50 @@ app.post('/submit-work-form', async (req, res) => {
     const result = await pool.query(query, values);
     console.log('✅ Work profile data inserted successfully');
 
-    // Send email
-    const emailSubject = '💼 New Work Abroad Inquiry';
+    // Send professional email notification
+    const emailSubject = '💼 New Work Abroad Inquiry - Payana Overseas';
     const emailBody = `
-      <h2>Work Abroad Inquiry</h2>
-      <p>A new candidate wants to work abroad. Here are their details:</p>
-      ${formatAsTable({
-        'Occupation': formData.occupation,
-        'Education': formData.education,
-        'Experience': formData.experience,
-        'Name': formData.name,
-        'Email': formData.email,
-        'Phone': formData.phone
-      })}
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: #28a745; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0; font-size: 24px;">💼 New Work Abroad Inquiry</h1>
+        </div>
+        
+        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px;">
+          <p style="font-size: 16px; margin-bottom: 20px;">
+            A new candidate is interested in working abroad. Here are their details:
+          </p>
+          
+          ${formatAsTable({
+            'Occupation': formData.occupation || 'Not specified',
+            'Education Level': formData.education || 'Not specified',
+            'Experience': formData.experience || 'Not specified',
+            '---': '---',
+            'Full Name': formData.name || 'Not provided',
+            'Email Address': formData.email || 'Not provided',
+            'Phone Number': formData.phone || 'Not provided'
+          })}
+          
+          <div style="margin-top: 30px; padding: 15px; background-color: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 4px;">
+            <p style="margin: 0; font-size: 14px;">
+              <strong>💡 Tip:</strong> Review the candidate's profile and reach out within 24 hours for best conversion rates.
+            </p>
+          </div>
+          
+          <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; font-size: 12px; color: #666;">
+            <p style="margin: 5px 0;">This is an automated notification from Payana Overseas CRM</p>
+            <p style="margin: 5px 0;">Submission Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+          </div>
+        </div>
+      </body>
+      </html>
     `;
+    
     sendEmail(emailSubject, emailBody);
 
     res.status(200).json({
@@ -398,6 +480,7 @@ app.post('/submit-work-form', async (req, res) => {
 });
 
 // Invest form submission
+// Invest form submission with enhanced email
 app.post('/submit-invest-form', async (req, res) => {
   const { name, email, country } = req.body;
   console.log('💰 Received investment inquiry:', { name, email, country });
@@ -412,17 +495,47 @@ app.post('/submit-invest-form', async (req, res) => {
     const result = await pool.query(query, [name, email, country]);
     console.log('✅ Investment data inserted successfully');
 
-    // Send email
-    const emailSubject = '💰 New Investment Inquiry';
+    // Send professional email notification
+    const emailSubject = '💰 New Investment Inquiry - Payana Overseas';
     const emailBody = `
-      <h2>Investment Abroad Inquiry</h2>
-      <p>A new investor wants to invest abroad. Here are their details:</p>
-      ${formatAsTable({ 
-        'Name': name, 
-        'Email': email, 
-        'Country': country 
-      })}
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      </head>
+      <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+        <div style="background-color: #dc3545; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+          <h1 style="margin: 0; font-size: 24px;">💰 New Investment Inquiry</h1>
+        </div>
+        
+        <div style="background-color: #f9f9f9; padding: 20px; border-radius: 0 0 8px 8px;">
+          <p style="font-size: 16px; margin-bottom: 20px;">
+            A potential investor has expressed interest in investing abroad. Here are their details:
+          </p>
+          
+          ${formatAsTable({
+            'Country of Interest': country || 'Not specified',
+            '---': '---',
+            'Full Name': name || 'Not provided',
+            'Email Address': email || 'Not provided'
+          })}
+          
+          <div style="margin-top: 30px; padding: 15px; background-color: #f8d7da; border-left: 4px solid #dc3545; border-radius: 4px;">
+            <p style="margin: 0; font-size: 14px;">
+              <strong>🔥 High Priority:</strong> Investment inquiries require immediate attention. Schedule a consultation call ASAP.
+            </p>
+          </div>
+          
+          <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; font-size: 12px; color: #666;">
+            <p style="margin: 5px 0;">This is an automated notification from Payana Overseas CRM</p>
+            <p style="margin: 5px 0;">Submission Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+          </div>
+        </div>
+      </body>
+      </html>
     `;
+    
     sendEmail(emailSubject, emailBody);
 
     res.status(200).json({
@@ -439,6 +552,7 @@ app.post('/submit-invest-form', async (req, res) => {
     });
   }
 });
+
 
 // ==================== ADMIN LEADS ROUTES ====================
 
