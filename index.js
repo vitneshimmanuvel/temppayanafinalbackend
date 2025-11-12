@@ -11,43 +11,40 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT || 5000;
 
-// Middleware
+// ==================== MIDDLEWARE ====================
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.urlencoded({ extended: true }));
 
-// PostgreSQL setup with NEW Neon DB connection string
+// ==================== DATABASE SETUP ====================
 const pool = new Pool({
-  connectionString: 'postgresql://neondb_owner:npg_hMv2YDGg0VoT@ep-late-band-ade3oc4m-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require',
+  connectionString: process.env.DATABASE_URL,
   ssl: {
     rejectUnauthorized: false
   }
 });
 
-// Test database connection
 pool.connect((err, client, release) => {
   if (err) {
-    console.error('❌ Error connecting to Neon database:', err.stack);
+    console.error('❌ Error connecting to database:', err.stack);
   } else {
-    console.log('✅ Successfully connected to Neon database');
+    console.log('✅ Successfully connected to database');
     release();
   }
 });
 
-// Cloudinary Configuration
+// ==================== CLOUDINARY SETUP ====================
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Multer Configuration - Memory Storage for Cloudinary
+// ==================== MULTER CONFIGURATION ====================
 const storage = multer.memoryStorage();
 const upload = multer({ 
   storage: storage,
-  limits: { 
-    fileSize: 10 * 1024 * 1024 // 10MB limit
-  },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('image/')) {
       cb(null, true);
@@ -57,13 +54,9 @@ const upload = multer({
   }
 });
 
-// Video upload configuration
-const videoStorage = multer.memoryStorage();
 const videoUpload = multer({ 
-  storage: videoStorage,
-  limits: { 
-    fileSize: 100 * 1024 * 1024 // 100MB limit for videos
-  },
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB
   fileFilter: (req, file, cb) => {
     if (file.mimetype.startsWith('video/')) {
       cb(null, true);
@@ -73,7 +66,7 @@ const videoUpload = multer({
   }
 });
 
-// Nodemailer setup
+// ==================== NODEMAILER SETUP ====================
 const transporter = nodemailer.createTransport({
   service: 'gmail',
   auth: {
@@ -82,15 +75,24 @@ const transporter = nodemailer.createTransport({
   }
 });
 
-// Helper Functions
-// Updated Helper Function for Multiple Recipients
+// Verify email configuration
+transporter.verify((error, success) => {
+  if (error) {
+    console.error('❌ Email configuration error:', error);
+  } else {
+    console.log('✅ Email server is ready to send messages');
+  }
+});
+
+// ==================== HELPER FUNCTIONS ====================
+
+// Send Email to Multiple Recipients
 const sendEmail = (subject, htmlContent) => {
-  // Split comma-separated email addresses and trim whitespace
   const recipients = process.env.EMAIL_RECEIVERS.split(',').map(email => email.trim());
   
   const mailOptions = {
     from: `Payana Overseas <${process.env.EMAIL_USER}>`,
-    to: recipients.join(', '), // Join all recipients
+    to: recipients,
     subject: subject,
     html: htmlContent
   };
@@ -105,7 +107,7 @@ const sendEmail = (subject, htmlContent) => {
   });
 };
 
-// Enhanced formatAsTable with better styling
+// Format data as HTML table
 const formatAsTable = (dataObj) => {
   return `
     <table border="1" cellpadding="10" cellspacing="0" style="border-collapse: collapse; width: 100%; max-width: 600px; font-family: Arial, sans-serif;">
@@ -116,19 +118,27 @@ const formatAsTable = (dataObj) => {
         </tr>
       </thead>
       <tbody>
-        ${Object.entries(dataObj).map(([key, value]) =>
-          `<tr style="border-bottom: 1px solid #ddd;">
+        ${Object.entries(dataObj).map(([key, value]) => {
+          let displayValue = 'N/A';
+          if (value !== null && value !== undefined && value !== '') {
+            if (typeof value === 'boolean') {
+              displayValue = value ? 'Yes' : 'No';
+            } else {
+              displayValue = String(value);
+            }
+          }
+          
+          return `<tr style="border-bottom: 1px solid #ddd;">
             <th align="left" style="padding: 10px; background-color: #f5f5f5; font-weight: 600;">${key}</th>
-            <td style="padding: 10px;">${value || 'N/A'}</td>
-          </tr>`
-        ).join('')}
+            <td style="padding: 10px;">${displayValue}</td>
+          </tr>`;
+        }).join('')}
       </tbody>
     </table>
   `;
 };
 
-
-// Cloudinary Upload Helper
+// Upload image to Cloudinary
 const uploadToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
@@ -141,38 +151,28 @@ const uploadToCloudinary = (buffer) => {
         ]
       },
       (error, result) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve(result);
-        }
+        if (error) reject(error);
+        else resolve(result);
       }
     );
     streamifier.createReadStream(buffer).pipe(uploadStream);
   });
 };
 
-// Video upload to Cloudinary
+// Upload video to Cloudinary
 const uploadVideoToCloudinary = (buffer) => {
   return new Promise((resolve, reject) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: 'payana_testimonials',
         resource_type: 'video',
-        eager: [
-          { width: 1280, height: 720, crop: 'limit', format: 'mp4' }
-        ],
+        eager: [{ width: 1280, height: 720, crop: 'limit', format: 'mp4' }],
         eager_async: false,
-        transformation: [
-          { quality: 'auto:good' }
-        ]
+        transformation: [{ quality: 'auto:good' }]
       },
       (error, result) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve(result);
-        }
+        if (error) reject(error);
+        else resolve(result);
       }
     );
     streamifier.createReadStream(buffer).pipe(uploadStream);
@@ -180,11 +180,8 @@ const uploadVideoToCloudinary = (buffer) => {
 };
 
 // ==================== DATABASE INITIALIZATION ====================
-
-// Create all necessary tables
 const initializeTables = async () => {
   try {
-    // Study table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS study (
         id SERIAL PRIMARY KEY,
@@ -203,7 +200,6 @@ const initializeTables = async () => {
     `);
     console.log('✅ Study table ready');
 
-    // Work profiles table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS work_profiles (
         id SERIAL PRIMARY KEY,
@@ -218,7 +214,6 @@ const initializeTables = async () => {
     `);
     console.log('✅ Work profiles table ready');
 
-    // Invest table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS invest (
         id SERIAL PRIMARY KEY,
@@ -230,7 +225,6 @@ const initializeTables = async () => {
     `);
     console.log('✅ Invest table ready');
 
-    // News articles table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS news_articles (
         id SERIAL PRIMARY KEY,
@@ -250,7 +244,6 @@ const initializeTables = async () => {
     `);
     console.log('✅ News articles table ready');
 
-    // Testimonials table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS testimonials (
         id SERIAL PRIMARY KEY,
@@ -269,7 +262,6 @@ const initializeTables = async () => {
     `);
     console.log('✅ Testimonials table ready');
 
-    // Ads table
     await pool.query(`
       CREATE TABLE IF NOT EXISTS ads (
         id SERIAL PRIMARY KEY,
@@ -285,19 +277,16 @@ const initializeTables = async () => {
     console.log('✅ Ads table ready');
 
     console.log('🎉 All tables initialized successfully!');
-
   } catch (err) {
     console.error('❌ Error initializing tables:', err);
   }
 };
 
-// Initialize database
 initializeTables();
 
 // ==================== FORM SUBMISSION ROUTES ====================
 
 // Study form submission
-// Study form submission with enhanced email
 app.post('/submit-form', async (req, res) => {
   const formData = req.body;
   console.log('📚 Received study form data:', formData);
@@ -327,7 +316,6 @@ app.post('/submit-form', async (req, res) => {
     const result = await pool.query(query, values);
     console.log('✅ Study data inserted successfully');
 
-    // Send professional email notification
     const emailSubject = '🎓 New Study Abroad Inquiry - Payana Overseas';
     const emailBody = `
       <!DOCTYPE html>
@@ -347,17 +335,17 @@ app.post('/submit-form', async (req, res) => {
           </p>
           
           ${formatAsTable({
-            'Country of Interest': formData.selectedCountry || 'Not specified',
-            'Qualification': formData.selectedQualification || 'Not specified',
-            'Age': formData.selectedAge || 'Not specified',
-            'Education Topic': formData.selectedEducationTopic || 'Not specified',
-            'Current CGPA': formData.currentCgpa || 'Not specified',
-            'Budget Range': formData.selectedBudget || 'Not specified',
-            'Needs Loan': formData.needsLoan ? 'Yes' : 'No',
+            'Country of Interest': formData.selectedCountry,
+            'Qualification': formData.selectedQualification,
+            'Age': formData.selectedAge,
+            'Education Topic': formData.selectedEducationTopic,
+            'Current CGPA': formData.currentCgpa,
+            'Budget Range': formData.selectedBudget,
+            'Needs Loan': formData.needsLoan,
             '---': '---',
-            'Full Name': formData.name || 'Not provided',
-            'Email Address': formData.email || 'Not provided',
-            'Phone Number': formData.phone || 'Not provided'
+            'Full Name': formData.name,
+            'Email Address': formData.email,
+            'Phone Number': formData.phone
           })}
           
           <div style="margin-top: 30px; padding: 15px; background-color: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
@@ -393,7 +381,6 @@ app.post('/submit-form', async (req, res) => {
 });
 
 // Work form submission
-// Work form submission with enhanced email
 app.post('/submit-work-form', async (req, res) => {
   const formData = req.body;
   console.log('💼 Received work profile data:', formData);
@@ -418,7 +405,6 @@ app.post('/submit-work-form', async (req, res) => {
     const result = await pool.query(query, values);
     console.log('✅ Work profile data inserted successfully');
 
-    // Send professional email notification
     const emailSubject = '💼 New Work Abroad Inquiry - Payana Overseas';
     const emailBody = `
       <!DOCTYPE html>
@@ -438,13 +424,13 @@ app.post('/submit-work-form', async (req, res) => {
           </p>
           
           ${formatAsTable({
-            'Occupation': formData.occupation || 'Not specified',
-            'Education Level': formData.education || 'Not specified',
-            'Experience': formData.experience || 'Not specified',
+            'Occupation': formData.occupation,
+            'Education Level': formData.education,
+            'Experience': formData.experience,
             '---': '---',
-            'Full Name': formData.name || 'Not provided',
-            'Email Address': formData.email || 'Not provided',
-            'Phone Number': formData.phone || 'Not provided'
+            'Full Name': formData.name,
+            'Email Address': formData.email,
+            'Phone Number': formData.phone
           })}
           
           <div style="margin-top: 30px; padding: 15px; background-color: #d1ecf1; border-left: 4px solid #17a2b8; border-radius: 4px;">
@@ -480,7 +466,6 @@ app.post('/submit-work-form', async (req, res) => {
 });
 
 // Invest form submission
-// Invest form submission with enhanced email
 app.post('/submit-invest-form', async (req, res) => {
   const { name, email, country } = req.body;
   console.log('💰 Received investment inquiry:', { name, email, country });
@@ -495,7 +480,6 @@ app.post('/submit-invest-form', async (req, res) => {
     const result = await pool.query(query, [name, email, country]);
     console.log('✅ Investment data inserted successfully');
 
-    // Send professional email notification
     const emailSubject = '💰 New Investment Inquiry - Payana Overseas';
     const emailBody = `
       <!DOCTYPE html>
@@ -515,10 +499,10 @@ app.post('/submit-invest-form', async (req, res) => {
           </p>
           
           ${formatAsTable({
-            'Country of Interest': country || 'Not specified',
+            'Country of Interest': country,
             '---': '---',
-            'Full Name': name || 'Not provided',
-            'Email Address': email || 'Not provided'
+            'Full Name': name,
+            'Email Address': email
           })}
           
           <div style="margin-top: 30px; padding: 15px; background-color: #f8d7da; border-left: 4px solid #dc3545; border-radius: 4px;">
@@ -553,63 +537,40 @@ app.post('/submit-invest-form', async (req, res) => {
   }
 });
 
-
 // ==================== ADMIN LEADS ROUTES ====================
 
-// GET study leads (for admin)
 app.get('/admin/leads/study', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM study ORDER BY created_at DESC'
-    );
-    
-    res.json({ 
-      success: true, 
-      data: result.rows
-    });
+    const result = await pool.query('SELECT * FROM study ORDER BY created_at DESC');
+    res.json({ success: true, data: result.rows });
   } catch (err) {
     console.error('❌ Error fetching study leads:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// GET work leads (for admin)
 app.get('/admin/leads/work', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM work_profiles ORDER BY created_at DESC'
-    );
-    
-    res.json({ 
-      success: true, 
-      data: result.rows
-    });
+    const result = await pool.query('SELECT * FROM work_profiles ORDER BY created_at DESC');
+    res.json({ success: true, data: result.rows });
   } catch (err) {
     console.error('❌ Error fetching work leads:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// GET investment leads (for admin)
 app.get('/admin/leads/invest', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM invest ORDER BY created_at DESC'
-    );
-    
-    res.json({ 
-      success: true, 
-      data: result.rows
-    });
+    const result = await pool.query('SELECT * FROM invest ORDER BY created_at DESC');
+    res.json({ success: true, data: result.rows });
   } catch (err) {
     console.error('❌ Error fetching invest leads:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// ==================== NEWS MANAGEMENT ROUTES ====================
+// ==================== NEWS ROUTES ====================
 
-// GET all active news articles (for public website)
 app.get('/news', async (req, res) => {
   try {
     const result = await pool.query(
@@ -634,24 +595,16 @@ app.get('/news', async (req, res) => {
   }
 });
 
-// GET all news articles (for admin portal)
 app.get('/admin/news', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM news_articles ORDER BY created_at DESC'
-    );
-    
-    res.json({ 
-      success: true, 
-      data: result.rows
-    });
+    const result = await pool.query('SELECT * FROM news_articles ORDER BY created_at DESC');
+    res.json({ success: true, data: result.rows });
   } catch (err) {
     console.error('❌ Error fetching admin news:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// POST - Create new news article
 app.post('/news', upload.single('image'), async (req, res) => {
   try {
     const { date, time, description, tag } = req.body;
@@ -661,17 +614,13 @@ app.post('/news', upload.single('image'), async (req, res) => {
     }
 
     if (!date || !time || !description || !tag) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'All fields are required' 
-      });
+      return res.status(400).json({ success: false, message: 'All fields are required' });
     }
 
     console.log('📸 Uploading image to Cloudinary...');
     const cloudinaryResult = await uploadToCloudinary(req.file.buffer);
     console.log('✅ Image uploaded:', cloudinaryResult.secure_url);
 
-    // Parse description
     let descArray = [];
     if (typeof description === 'string') {
       try {
@@ -711,7 +660,6 @@ app.post('/news', upload.single('image'), async (req, res) => {
   }
 });
 
-// PUT - Update news article
 app.put('/news/:id', upload.single('image'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -728,11 +676,9 @@ app.put('/news/:id', upload.single('image'), async (req, res) => {
     let imageUrl = currentArticle.image_url;
     let cloudinaryId = currentArticle.cloudinary_id;
 
-    // If new image uploaded
     if (req.file) {
       console.log('📸 Uploading new image to Cloudinary...');
       
-      // Delete old image from Cloudinary if exists
       if (cloudinaryId) {
         try {
           await cloudinary.uploader.destroy(cloudinaryId);
@@ -796,7 +742,6 @@ app.put('/news/:id', upload.single('image'), async (req, res) => {
   }
 });
 
-// DELETE - Delete news article
 app.delete('/news/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -810,7 +755,6 @@ app.delete('/news/:id', async (req, res) => {
 
     const article = checkResult.rows[0];
 
-    // Delete from Cloudinary if exists
     if (article.cloudinary_id) {
       try {
         await cloudinary.uploader.destroy(article.cloudinary_id);
@@ -830,7 +774,6 @@ app.delete('/news/:id', async (req, res) => {
   }
 });
 
-// PATCH - Toggle article active status
 app.patch('/news/:id/toggle', async (req, res) => {
   try {
     const { id } = req.params;
@@ -855,16 +798,10 @@ app.patch('/news/:id/toggle', async (req, res) => {
   }
 });
 
-// POST - Increment article views
 app.post('/news/:id/view', async (req, res) => {
   try {
     const { id } = req.params;
-    
-    await pool.query(
-      'UPDATE news_articles SET views = views + 1 WHERE id = $1',
-      [id]
-    );
-
+    await pool.query('UPDATE news_articles SET views = views + 1 WHERE id = $1', [id]);
     res.json({ success: true, message: 'View counted' });
   } catch (error) {
     console.error('❌ Error incrementing views:', error);
@@ -872,7 +809,6 @@ app.post('/news/:id/view', async (req, res) => {
   }
 });
 
-// GET - News statistics
 app.get('/admin/news/stats', async (req, res) => {
   try {
     const stats = await pool.query(`
@@ -907,41 +843,28 @@ app.get('/admin/news/stats', async (req, res) => {
 
 // ==================== TESTIMONIAL ROUTES ====================
 
-// GET all active testimonials
 app.get('/testimonials', async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT id, video_url, name, prefix, views FROM testimonials WHERE is_active = true ORDER BY display_order ASC, created_at DESC'
     );
-    
-    res.json({ 
-      success: true, 
-      data: result.rows
-    });
+    res.json({ success: true, data: result.rows });
   } catch (err) {
     console.error('❌ Error fetching testimonials:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// GET all testimonials (for admin)
 app.get('/admin/testimonials', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM testimonials ORDER BY display_order ASC, created_at DESC'
-    );
-    
-    res.json({ 
-      success: true, 
-      data: result.rows
-    });
+    const result = await pool.query('SELECT * FROM testimonials ORDER BY display_order ASC, created_at DESC');
+    res.json({ success: true, data: result.rows });
   } catch (err) {
     console.error('❌ Error fetching admin testimonials:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// POST - Create new testimonial
 app.post('/testimonials', videoUpload.single('video'), async (req, res) => {
   try {
     const { name, prefix } = req.body;
@@ -951,20 +874,14 @@ app.post('/testimonials', videoUpload.single('video'), async (req, res) => {
     }
 
     if (!name) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Name is required' 
-      });
+      return res.status(400).json({ success: false, message: 'Name is required' });
     }
 
     console.log('📹 Uploading video to Cloudinary...');
     const cloudinaryResult = await uploadVideoToCloudinary(req.file.buffer);
     console.log('✅ Video uploaded:', cloudinaryResult.secure_url);
 
-    // Get the highest display_order
-    const maxOrderResult = await pool.query(
-      'SELECT COALESCE(MAX(display_order), 0) as max_order FROM testimonials'
-    );
+    const maxOrderResult = await pool.query('SELECT COALESCE(MAX(display_order), 0) as max_order FROM testimonials');
     const nextOrder = parseInt(maxOrderResult.rows[0].max_order) + 1;
 
     const query = `
@@ -996,7 +913,6 @@ app.post('/testimonials', videoUpload.single('video'), async (req, res) => {
   }
 });
 
-// PUT - Update testimonial
 app.put('/testimonials/:id', videoUpload.single('video'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -1013,11 +929,9 @@ app.put('/testimonials/:id', videoUpload.single('video'), async (req, res) => {
     let videoUrl = currentTestimonial.video_url;
     let cloudinaryId = currentTestimonial.cloudinary_id;
 
-    // If new video uploaded
     if (req.file) {
       console.log('📹 Uploading new video to Cloudinary...');
       
-      // Delete old video from Cloudinary if exists
       if (cloudinaryId) {
         try {
           await cloudinary.uploader.destroy(cloudinaryId, { resource_type: 'video' });
@@ -1068,7 +982,6 @@ app.put('/testimonials/:id', videoUpload.single('video'), async (req, res) => {
   }
 });
 
-// DELETE - Delete testimonial
 app.delete('/testimonials/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -1082,7 +995,6 @@ app.delete('/testimonials/:id', async (req, res) => {
 
     const testimonial = checkResult.rows[0];
 
-    // Delete from Cloudinary if exists
     if (testimonial.cloudinary_id) {
       try {
         await cloudinary.uploader.destroy(testimonial.cloudinary_id, { resource_type: 'video' });
@@ -1102,7 +1014,6 @@ app.delete('/testimonials/:id', async (req, res) => {
   }
 });
 
-// PATCH - Toggle testimonial active status
 app.patch('/testimonials/:id/toggle', async (req, res) => {
   try {
     const { id } = req.params;
@@ -1127,16 +1038,12 @@ app.patch('/testimonials/:id/toggle', async (req, res) => {
   }
 });
 
-// PUT - Reorder testimonials
 app.put('/testimonials/reorder', async (req, res) => {
   try {
     const { order } = req.body;
     
     if (!order || !Array.isArray(order)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Order array is required' 
-      });
+      return res.status(400).json({ success: false, message: 'Order array is required' });
     }
 
     const updatePromises = order.map((item) => {
@@ -1149,30 +1056,17 @@ app.put('/testimonials/reorder', async (req, res) => {
     await Promise.all(updatePromises);
     
     console.log('✅ Testimonials reordered successfully');
-    res.json({ 
-      success: true, 
-      message: 'Order updated successfully' 
-    });
+    res.json({ success: true, message: 'Order updated successfully' });
   } catch (error) {
     console.error('❌ Error updating order:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Failed to update order',
-      error: error.message 
-    });
+    res.status(500).json({ success: false, message: 'Failed to update order', error: error.message });
   }
 });
 
-// POST - Increment testimonial views
 app.post('/testimonials/:id/view', async (req, res) => {
   try {
     const { id } = req.params;
-    
-    await pool.query(
-      'UPDATE testimonials SET views = views + 1 WHERE id = $1',
-      [id]
-    );
-
+    await pool.query('UPDATE testimonials SET views = views + 1 WHERE id = $1', [id]);
     res.json({ success: true, message: 'View counted' });
   } catch (error) {
     console.error('❌ Error incrementing views:', error);
@@ -1180,7 +1074,6 @@ app.post('/testimonials/:id/view', async (req, res) => {
   }
 });
 
-// GET - Testimonial statistics
 app.get('/admin/testimonials/stats', async (req, res) => {
   try {
     const stats = await pool.query(`
@@ -1215,41 +1108,26 @@ app.get('/admin/testimonials/stats', async (req, res) => {
 
 // ==================== ADS ROUTES ====================
 
-// GET active ad
 app.get('/ads/active', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT id, image_url FROM ads WHERE is_active = true LIMIT 1'
-    );
-    
-    res.json({ 
-      success: true, 
-      data: result.rows[0] || null
-    });
+    const result = await pool.query('SELECT id, image_url FROM ads WHERE is_active = true LIMIT 1');
+    res.json({ success: true, data: result.rows[0] || null });
   } catch (err) {
     console.error('❌ Error fetching active ad:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// GET all ads (for admin)
 app.get('/admin/ads', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM ads ORDER BY created_at DESC'
-    );
-    
-    res.json({ 
-      success: true, 
-      data: result.rows
-    });
+    const result = await pool.query('SELECT * FROM ads ORDER BY created_at DESC');
+    res.json({ success: true, data: result.rows });
   } catch (err) {
     console.error('❌ Error fetching admin ads:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
 
-// POST - Create new ad
 app.post('/ads', upload.single('image'), async (req, res) => {
   try {
     if (!req.file) {
@@ -1261,16 +1139,12 @@ app.post('/ads', upload.single('image'), async (req, res) => {
     console.log('✅ Ad image uploaded:', cloudinaryResult.secure_url);
 
     const query = `
-      INSERT INTO ads (
-        image_url, cloudinary_id, is_active
-      ) VALUES ($1, $2, false)
+      INSERT INTO ads (image_url, cloudinary_id, is_active)
+      VALUES ($1, $2, false)
       RETURNING *
     `;
 
-    const values = [
-      cloudinaryResult.secure_url,
-      cloudinaryResult.public_id
-    ];
+    const values = [cloudinaryResult.secure_url, cloudinaryResult.public_id];
 
     const result = await pool.query(query, values);
     console.log('✅ Ad created successfully');
@@ -1286,7 +1160,6 @@ app.post('/ads', upload.single('image'), async (req, res) => {
   }
 });
 
-// PUT - Update ad
 app.put('/ads/:id', upload.single('image'), async (req, res) => {
   try {
     const { id } = req.params;
@@ -1302,11 +1175,9 @@ app.put('/ads/:id', upload.single('image'), async (req, res) => {
     let imageUrl = currentAd.image_url;
     let cloudinaryId = currentAd.cloudinary_id;
 
-    // If new image uploaded
     if (req.file) {
       console.log('📸 Uploading new ad image to Cloudinary...');
       
-      // Delete old image from Cloudinary if exists
       if (cloudinaryId) {
         try {
           await cloudinary.uploader.destroy(cloudinaryId);
@@ -1332,12 +1203,7 @@ app.put('/ads/:id', upload.single('image'), async (req, res) => {
       RETURNING *
     `;
 
-    const values = [
-      imageUrl,
-      cloudinaryId,
-      'admin',
-      id
-    ];
+    const values = [imageUrl, cloudinaryId, 'admin', id];
 
     const result = await pool.query(updateQuery, values);
     console.log('✅ Ad updated successfully');
@@ -1353,7 +1219,6 @@ app.put('/ads/:id', upload.single('image'), async (req, res) => {
   }
 });
 
-// DELETE - Delete ad
 app.delete('/ads/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -1367,7 +1232,6 @@ app.delete('/ads/:id', async (req, res) => {
 
     const ad = checkResult.rows[0];
 
-    // Delete from Cloudinary if exists
     if (ad.cloudinary_id) {
       try {
         await cloudinary.uploader.destroy(ad.cloudinary_id);
@@ -1387,15 +1251,12 @@ app.delete('/ads/:id', async (req, res) => {
   }
 });
 
-// PATCH - Set ad as active
 app.patch('/ads/:id/set-active', async (req, res) => {
   try {
     const { id } = req.params;
     
-    // First, deactivate all ads
     await pool.query('UPDATE ads SET is_active = false');
     
-    // Then activate the selected ad
     const result = await pool.query(
       'UPDATE ads SET is_active = true WHERE id = $1 RETURNING *',
       [id]
@@ -1416,22 +1277,16 @@ app.patch('/ads/:id/set-active', async (req, res) => {
   }
 });
 
-// PATCH - Deactivate all ads
 app.patch('/ads/deactivate-all', async (req, res) => {
   try {
     await pool.query('UPDATE ads SET is_active = false');
-    
-    res.json({ 
-      success: true, 
-      message: 'All ads deactivated'
-    });
+    res.json({ success: true, message: 'All ads deactivated' });
   } catch (error) {
     console.error('❌ Error deactivating ads:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
 
-// GET - Ad statistics
 app.get('/admin/ads/stats', async (req, res) => {
   try {
     const stats = await pool.query(`
@@ -1441,10 +1296,7 @@ app.get('/admin/ads/stats', async (req, res) => {
       FROM ads
     `);
 
-    res.json({ 
-      success: true, 
-      data: stats.rows[0]
-    });
+    res.json({ success: true, data: stats.rows[0] });
   } catch (error) {
     console.error('❌ Error fetching ad stats:', error);
     res.status(500).json({ success: false, message: error.message });
@@ -1453,17 +1305,17 @@ app.get('/admin/ads/stats', async (req, res) => {
 
 // ==================== UTILITY ROUTES ====================
 
-// Health check route
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     message: 'Payana Overseas API is running',
-    database: 'Connected to Neon PostgreSQL',
+    database: 'Connected',
+    email: 'Configured',
+    cloudinary: 'Configured',
     timestamp: new Date().toISOString()
   });
 });
 
-// Database test route
 app.get('/test-db', async (req, res) => {
   try {
     const result = await pool.query('SELECT NOW() as current_time');
@@ -1481,6 +1333,19 @@ app.get('/test-db', async (req, res) => {
   }
 });
 
+app.post('/test-email', (req, res) => {
+  const testSubject = '✅ Test Email - Payana Overseas';
+  const testBody = `
+    <h1>Test Email</h1>
+    <p>If you receive this, your email configuration is working correctly!</p>
+    <p>Time: ${new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}</p>
+  `;
+  
+  sendEmail(testSubject, testBody);
+  
+  res.json({ success: true, message: 'Test email sent to all recipients' });
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error('❌ Unhandled error:', err);
@@ -1496,8 +1361,8 @@ app.listen(port, () => {
   console.log(`\n🚀 Payana Overseas Server running on port ${port}`);
   console.log(`📍 Health check: http://localhost:${port}/health`);
   console.log(`🗄️  Database test: http://localhost:${port}/test-db`);
+  console.log(`📧 Email test: POST http://localhost:${port}/test-email`);
   console.log(`📰 News API: http://localhost:${port}/news`);
-  console.log(`🔐 Admin API: http://localhost:${port}/admin/news`);
   console.log(`💬 Testimonials: http://localhost:${port}/testimonials`);
   console.log(`📢 Ads: http://localhost:${port}/ads/active\n`);
 });
